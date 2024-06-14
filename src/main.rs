@@ -38,6 +38,7 @@ fn atom(s: &str) -> IResult<&str, Expr> {
             char(']'),
         ),
     )(s)
+    // this is safe to unwrap because we know it's only digits
     .map(|(inp, (sym, idx))| (inp, Expr::Atom(sym, idx.parse().unwrap())))
 }
 
@@ -101,6 +102,77 @@ fn smiles(s: &str) -> IResult<&str, Vec<Expr>> {
     context("smiles", many1(alt((atom, bond, label, branch))))(s)
 }
 
+struct Smiles<'a> {
+    exprs: Vec<Expr<'a>>,
+}
+
+impl<'a> TryFrom<&'a str> for Smiles<'a> {
+    type Error = nom::Err<nom::error::Error<&'a str>>;
+
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        let (rest, got) = smiles(value)?;
+        if !rest.is_empty() {
+            return Err(nom::Err::Error(nom::error::Error::new(
+                rest,
+                nom::error::ErrorKind::TooLarge,
+            )));
+        }
+        Ok(Self { exprs: got })
+    }
+}
+
+impl Display for Smiles<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for g in &self.exprs {
+            write!(f, "{g}")?;
+        }
+        Ok(())
+    }
+}
+
+#[allow(unused)]
+fn get_atoms<'a>(exprs: &'a Vec<Expr<'a>>) -> Vec<(&'a &'a str, &'a usize)> {
+    let mut ret = Vec::new();
+    for e in exprs {
+        match e {
+            Expr::Atom(s, u) => ret.push((s, u)),
+            Expr::Bond(_) => (),
+            Expr::Label(_) => (),
+            Expr::Branch(b) => ret.extend(get_atoms(b)),
+        }
+    }
+    ret
+}
+
+fn get_atoms_mut<'a, 'b>(
+    exprs: &'b mut Vec<Expr<'a>>,
+) -> Vec<(&'b mut &'a str, &'b mut usize)> {
+    let mut ret = Vec::new();
+    for e in exprs.iter_mut() {
+        match e {
+            Expr::Atom(s, u) => ret.push((s, u)),
+            Expr::Bond(_) => (),
+            Expr::Label(_) => (),
+            Expr::Branch(b) => ret.extend(get_atoms_mut(b)),
+        }
+    }
+    ret
+}
+
+impl<'a> Smiles<'a> {
+    #[allow(unused)]
+    fn atoms(&self) -> Vec<&usize> {
+        get_atoms(&self.exprs).into_iter().map(|p| p.1).collect()
+    }
+
+    fn atoms_mut<'b>(&'b mut self) -> Vec<&'b mut usize> {
+        get_atoms_mut(&mut self.exprs)
+            .into_iter()
+            .map(|p| p.1)
+            .collect()
+    }
+}
+
 /// a smiles is an atom followed by additional bond, atom pairs, but the
 /// explicit bond is optional (indicating a single bond)
 ///
@@ -110,15 +182,44 @@ fn smiles(s: &str) -> IResult<&str, Vec<Expr>> {
 fn main() {
     let smi = read_to_string("test.smi").unwrap().trim().to_string();
     dbg!(&smi);
-    let (rest, got) = smiles(&smi).unwrap();
-    assert!(rest.is_empty());
+    let mut got = Smiles::try_from(smi.as_str()).unwrap();
+
+    // check that the initial parse worked
+    assert_eq!(got.to_string(), smi);
+
+    // I have 49 atoms, but the atom indices go from 1 to 59. I want to BOTH
+    // bring the values above 49 back into range AND make the numbers continuous
+
+    let mut atoms = got.atoms_mut();
+
+    // this gives a sequence of (idx, atom_idx) pair. I should sort by atom_idx,
+    // then go back through by idx setting atom_idx to an incrementing counter.
+    // cloning here because we don't want to modify atoms yet
+    let mut pairs: Vec<(usize, usize)> =
+        atoms.iter().map(|u| **u).enumerate().collect();
+    pairs.sort_by_key(|p| p.1);
+
+    let mut atom_idx = 1;
+    for (idx, _) in pairs {
+        *atoms[idx] = atom_idx;
+        atom_idx += 1;
+    }
+
+    dbg!(atoms.len());
+    dbg!(atoms);
 
     println!("output:");
-    let mut s = String::new();
-    use std::fmt::Write;
-    for g in got {
-        write!(s, "{g}").unwrap();
+    println!("{}", got.to_string());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse() {
+        let smi = read_to_string("test.smi").unwrap().trim().to_string();
+        let got = Smiles::try_from(smi.as_str()).unwrap();
+        assert_eq!(got.to_string(), smi);
     }
-    assert_eq!(s, smi);
-    println!("{s}");
 }
