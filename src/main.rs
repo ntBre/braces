@@ -38,7 +38,7 @@ fn atom(s: &str) -> IResult<&str, Expr> {
             char(']'),
         ),
     )(s)
-    .map(|(inp, tup)| (inp, Expr::Atom(tup)))
+    .map(|(inp, (sym, idx))| (inp, Expr::Atom(sym, idx.parse().unwrap())))
 }
 
 fn label(s: &str) -> IResult<&str, Expr> {
@@ -69,7 +69,7 @@ fn bond(s: &str) -> IResult<&str, Expr> {
 #[allow(unused)]
 #[derive(Debug)]
 enum Expr<'a> {
-    Atom((&'a str, &'a str)),
+    Atom(&'a str, usize),
     Bond(&'a str),
     Label(&'a str),
     Branch(Vec<Expr<'a>>),
@@ -78,7 +78,7 @@ enum Expr<'a> {
 impl Display for Expr<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Expr::Atom((sym, num)) => write!(f, "[{sym}:{num}]"),
+            Expr::Atom(sym, num) => write!(f, "[{sym}:{num}]"),
             Expr::Bond(s) => write!(f, "{s}"),
             Expr::Label(l) => write!(f, "{l}"),
             Expr::Branch(exprs) => {
