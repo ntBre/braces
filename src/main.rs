@@ -237,7 +237,10 @@ mod tests {
 
     #[test]
     fn parse() {
-        let smi = read_to_string("test.smi").unwrap().trim().to_string();
+        let smi = std::fs::read_to_string("test.smi")
+            .unwrap()
+            .trim()
+            .to_string();
         let got = Smiles::try_from(smi.as_str()).unwrap();
         assert_eq!(got.to_string(), smi);
     }
@@ -245,10 +248,6 @@ mod tests {
     #[test]
     fn parse_line() {
         let line = "t146j [C:1]1([H:31])=[N:2][C:3]([C:4]([C:5]([C:6](/[N:7]=[S:8](\\[N:9]([C:10]([C:11]([C:12]([N:13]([c:14]2[n:15][c:16]([H:45])[c:17]([H:46])[c:18]([H:47])[c:19]2[H:48])[C:20]([c:21]2[c:22]([H:51])[c:23]([H:52])[c:24]([Br:25])[c:26]([H:53])[c:27]2[H:54])([H:49])[H:50])([H:43])[H:44])([H:41])[H:42])([H:39])[H:40])[H:38])[C:28]([H:55])([H:56])[H:57])([H:36])[H:37])([H:34])[H:35])([H:32])[H:33])=[C:29]([H:58])[N:30]1[H:59] (9, 8, 7, 27)";
-        let res: IResult<_, _> =
-            tuple((take_while1(AsChar::is_alphanum), space1, smiles))(line);
-        let smi = line.split_ascii_whitespace().nth(1).unwrap();
-        let got = Smiles::try_from(smi).unwrap();
-        super::parse_line(line);
+        super::parse_line(line).unwrap();
     }
 }
