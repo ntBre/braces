@@ -1,14 +1,10 @@
-#![allow(unused)]
-
 use std::collections::HashMap;
 use std::error::Error;
+use std::fmt::Display;
 use std::io;
-use std::{fmt::Display, fs::read_to_string};
 
-use nom::bytes::complete::{is_not, take_while, take_while1};
+use nom::bytes::complete::{is_not, take_while1};
 use nom::character::complete::{space0, space1};
-use nom::character::{is_alphanumeric, is_space};
-use nom::combinator::recognize;
 use nom::multi::separated_list1;
 use nom::sequence::tuple;
 use nom::AsChar;
@@ -144,7 +140,7 @@ fn get_atoms<'a>(exprs: &'a Vec<Expr<'a>>) -> Vec<(&'a &'a str, &'a usize)> {
 }
 
 fn get_atoms_mut<'a, 'b>(
-    exprs: &'b mut Vec<Expr<'a>>,
+    exprs: &'b mut [Expr<'a>],
 ) -> Vec<(&'b mut &'a str, &'b mut usize)> {
     let mut ret = Vec::new();
     for e in exprs.iter_mut() {
@@ -163,7 +159,7 @@ impl<'a> Smiles<'a> {
         get_atoms(&self.exprs).into_iter().map(|p| p.1).collect()
     }
 
-    fn atoms_mut<'b>(&'b mut self) -> Vec<&'b mut usize> {
+    fn atoms_mut(&mut self) -> Vec<&mut usize> {
         get_atoms_mut(&mut self.exprs)
             .into_iter()
             .map(|p| p.1)
@@ -184,7 +180,7 @@ fn parse_line(
             separated_list1(tuple((tag(","), space0)), digit1),
             char(')'),
         ),
-    ))(&s)?;
+    ))(s)?;
     assert!(rest.is_empty(), "{}", rest);
     let (pid, _space, exprs, _space2, tors) = got;
     let tors: Vec<usize> =
