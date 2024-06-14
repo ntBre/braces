@@ -49,32 +49,14 @@ enum Atom<'a> {
 
 type Bond<'a> = &'a str;
 
-type Molecule<'a> = (Atom<'a>, Vec<(Option<Bond<'a>>, Atom<'a>)>);
-
-/// TODO a branch can actually start with a bond, so calling it a delimited
-/// molecule isn't quite right
-fn branch(s: &str) -> IResult<&str, Molecule> {
-    delimited(char('('), molecule, char(')'))(s)
-}
-
-/// a straight run of atoms and bonds
-fn non_branch(s: &str) -> IResult<&str, Molecule> {
-    tuple((atom, many0(pair(opt(bond), atom))))(s)
-}
-
-/// this needs to mutually recurse with branch because any molecule can contain
-/// a branch (the branches can nest). this name is really throwing me off too.
-/// the whole thing being parsed *is* the molecule.
-fn molecule(s: &str) -> IResult<&str, Molecule> {
-    alt((branch, non_branch))(s)
-}
+type Molecule<'a> = Vec<(Option<Bond<'a>>, Atom<'a>)>;
 
 /// I guess at any position there is not just an ATOM or BOND, there can also be
 /// a BRANCH, which is itself a delimited sequence of ATOM and BOND:
 ///
 /// (ATOM | BRANCH)
-fn smiles(s: &str) -> IResult<&str, Vec<Molecule>> {
-    many1(molecule)(s)
+fn smiles(s: &str) -> IResult<&str, Molecule> {
+    many0(pair(opt(bond), atom))(s)
 }
 
 /// a smiles is an atom followed by additional bond, atom pairs, but the
