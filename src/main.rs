@@ -56,10 +56,22 @@ fn bond(s: &str) -> IResult<&str, Expr> {
     .map(|(i, o)| (i, Expr::Bond(o)))
 }
 
-// let me just simplify this for now. at each position, I can have an ATOM, a
-// BOND, a LABEL, or a BRANCH, where a BRANCH is itself a delimited sequence of
-// ATOM | BOND | LABEL | BRANCH
+fn branch(s: &str) -> IResult<&str, Expr> {
+    context("branch", delimited(char('('), smiles, char(')')))(s)
+        .map(|(i, o)| (i, Expr::Branch(o)))
+}
 
+fn smiles(s: &str) -> IResult<&str, Vec<Expr>> {
+    context("smiles", many1(alt((atom, bond, label, branch))))(s)
+}
+
+/// The grammar for an atom-mapped SMILES string.
+///
+/// * `SMILES := (ATOM | BOND | LABEL | BRANCH)+`
+/// * `BRANCH := "(" SMILES ")"`
+/// * `LABEL := [0-9]+`
+/// * `BOND := "." | "-" | "=" | "#" | "$" | ":" | "/" | "\"`
+/// * `ATOM := "[" [^:]+ ":" [0-9]+ "]"`
 #[derive(Debug)]
 enum Expr<'a> {
     Atom(&'a str, usize),
@@ -83,15 +95,6 @@ impl Display for Expr<'_> {
             }
         }
     }
-}
-
-fn branch(s: &str) -> IResult<&str, Expr> {
-    context("branch", delimited(char('('), smiles, char(')')))(s)
-        .map(|(i, o)| (i, Expr::Branch(o)))
-}
-
-fn smiles(s: &str) -> IResult<&str, Vec<Expr>> {
-    context("smiles", many1(alt((atom, bond, label, branch))))(s)
 }
 
 #[derive(Debug)]
