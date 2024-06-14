@@ -5,7 +5,7 @@ use std::error::Error;
 use std::io;
 use std::{fmt::Display, fs::read_to_string};
 
-use nom::bytes::complete::{take_while, take_while1};
+use nom::bytes::complete::{is_not, take_while, take_while1};
 use nom::character::complete::{space0, space1};
 use nom::character::{is_alphanumeric, is_space};
 use nom::combinator::recognize;
@@ -26,23 +26,7 @@ fn element(s: &str) -> IResult<&str, &str> {
     // NOTE: do NOT put these in atomic order. you have to match longer tags
     // before shorter ones or the longer tag will not match!!! for example, if B
     // matches before Br, Br will not match
-    context(
-        "element",
-        alt((
-            tag("H"),
-            tag("He"),
-            tag("Br"),
-            tag("Ne"),
-            tag("B"),
-            tag("C"),
-            tag("N"),
-            tag("O"),
-            tag("F"),
-            tag("S"),
-            tag("c"),
-            tag("n"),
-        )),
-    )(s)
+    context("element", is_not(":"))(s)
 }
 
 fn atom(s: &str) -> IResult<&str, Expr> {
