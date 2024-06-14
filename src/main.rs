@@ -6,7 +6,7 @@ use nom::{
     character::complete::{char, digit1},
     error::context,
     multi::many1,
-    sequence::{delimited, tuple},
+    sequence::{delimited, separated_pair},
     IResult,
 };
 
@@ -32,7 +32,11 @@ fn element(s: &str) -> IResult<&str, &str> {
 fn atom(s: &str) -> IResult<&str, Expr> {
     context(
         "atom",
-        delimited(char('['), tuple((element, tag(":"), digit1)), char(']')),
+        delimited(
+            char('['),
+            separated_pair(element, tag(":"), digit1),
+            char(']'),
+        ),
     )(s)
     .map(|(inp, tup)| (inp, Expr::Atom(tup)))
 }
@@ -65,7 +69,7 @@ fn bond(s: &str) -> IResult<&str, Expr> {
 #[allow(unused)]
 #[derive(Debug)]
 enum Expr<'a> {
-    Atom((&'a str, &'a str, &'a str)),
+    Atom((&'a str, &'a str)),
     Bond(&'a str),
     Label(&'a str),
     Branch(Vec<Expr<'a>>),
@@ -74,7 +78,7 @@ enum Expr<'a> {
 impl Display for Expr<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Expr::Atom((sym, _colon, num)) => write!(f, "[{sym}:{num}]"),
+            Expr::Atom((sym, num)) => write!(f, "[{sym}:{num}]"),
             Expr::Bond(s) => write!(f, "{s}"),
             Expr::Label(l) => write!(f, "{l}"),
             Expr::Branch(exprs) => {
