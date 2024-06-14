@@ -1,4 +1,4 @@
-use std::fs::read_to_string;
+use std::{fmt::Display, fs::read_to_string};
 
 use nom::{
     branch::alt,
@@ -71,6 +71,23 @@ enum Expr<'a> {
     Branch(Vec<Expr<'a>>),
 }
 
+impl Display for Expr<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Expr::Atom((sym, _colon, num)) => write!(f, "[{sym}:{num}]"),
+            Expr::Bond(s) => write!(f, "{s}"),
+            Expr::Label(l) => write!(f, "{l}"),
+            Expr::Branch(exprs) => {
+                write!(f, "(")?;
+                for expr in exprs {
+                    write!(f, "{expr}")?;
+                }
+                write!(f, ")")
+            }
+        }
+    }
+}
+
 fn branch(s: &str) -> IResult<&str, Expr> {
     context("branch", delimited(char('('), smiles, char(')')))(s)
         .map(|(i, o)| (i, Expr::Branch(o)))
@@ -89,6 +106,15 @@ fn smiles(s: &str) -> IResult<&str, Vec<Expr>> {
 fn main() {
     let smi = read_to_string("test.smi").unwrap().trim().to_string();
     dbg!(&smi);
-    let (rest, _got) = dbg!(smiles(&smi).unwrap());
+    let (rest, got) = smiles(&smi).unwrap();
     assert!(rest.is_empty());
+
+    println!("output:");
+    let mut s = String::new();
+    use std::fmt::Write;
+    for g in got {
+        write!(s, "{g}").unwrap();
+    }
+    assert_eq!(s, smi);
+    println!("{s}");
 }
