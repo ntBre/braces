@@ -19,9 +19,6 @@ use nom::{
 };
 
 fn element(s: &str) -> IResult<&str, &str> {
-    // NOTE: do NOT put these in atomic order. you have to match longer tags
-    // before shorter ones or the longer tag will not match!!! for example, if B
-    // matches before Br, Br will not match
     context("element", is_not(":"))(s)
 }
 
