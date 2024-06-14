@@ -4,59 +4,80 @@ use nom::{
     branch::alt,
     bytes::complete::tag,
     character::complete::{char, digit1},
-    combinator::opt,
-    multi::{many0, many1},
-    sequence::{delimited, pair, tuple},
+    error::context,
+    multi::many1,
+    sequence::{delimited, tuple},
     IResult,
 };
 
 fn element(s: &str) -> IResult<&str, &str> {
-    alt((tag("H"), tag("He"), tag("C")))(s)
+    context(
+        "element",
+        alt((
+            tag("H"),
+            tag("He"),
+            tag("B"),
+            tag("C"),
+            tag("N"),
+            tag("O"),
+            tag("F"),
+            tag("Ne"),
+            tag("S"),
+            tag("c"),
+            tag("n"),
+        )),
+    )(s)
 }
 
-fn real_atom(s: &str) -> IResult<&str, Atom> {
-    delimited(char('['), tuple((element, tag(":"), digit1)), char(']'))(s)
-        .map(|(inp, tup)| (inp, Atom::Atom(tup)))
+fn atom(s: &str) -> IResult<&str, Expr> {
+    context(
+        "atom",
+        delimited(char('['), tuple((element, tag(":"), digit1)), char(']')),
+    )(s)
+    .map(|(inp, tup)| (inp, Expr::Atom(tup)))
 }
 
-fn label(s: &str) -> IResult<&str, Atom> {
-    digit1(s).map(|(inp, d)| (inp, Atom::Label(d)))
+fn label(s: &str) -> IResult<&str, Expr> {
+    context("label", digit1)(s).map(|(inp, d)| (inp, Expr::Label(d)))
 }
 
-fn atom(s: &str) -> IResult<&str, Atom> {
-    alt((real_atom, label))(s)
+fn bond(s: &str) -> IResult<&str, Expr> {
+    context(
+        "bond",
+        alt((
+            tag("."),
+            tag("-"),
+            tag("="),
+            tag("#"),
+            tag("$"),
+            tag(":"),
+            tag("/"),
+            tag("\\"),
+        )),
+    )(s)
+    .map(|(i, o)| (i, Expr::Bond(o)))
 }
 
-fn bond(s: &str) -> IResult<&str, &str> {
-    alt((
-        tag("."),
-        tag("-"),
-        tag("="),
-        tag("#"),
-        tag("$"),
-        tag(":"),
-        tag("/"),
-        tag("\\"),
-    ))(s)
-}
+// let me just simplify this for now. at each position, I can have an ATOM, a
+// BOND, a LABEL, or a BRANCH, where a BRANCH is itself a delimited sequence of
+// ATOM | BOND | LABEL | BRANCH
 
 #[allow(unused)]
 #[derive(Debug)]
-enum Atom<'a> {
+enum Expr<'a> {
     Atom((&'a str, &'a str, &'a str)),
+    Bond(&'a str),
     Label(&'a str),
+    Branch(Vec<Expr<'a>>),
 }
 
-type Bond<'a> = &'a str;
+fn branch(s: &str) -> IResult<&str, Expr> {
+    context("branch", delimited(char('('), smiles, char(')')))(s)
+        .map(|(i, o)| (i, Expr::Branch(o)))
+}
 
-type Molecule<'a> = Vec<(Option<Bond<'a>>, Atom<'a>)>;
-
-/// I guess at any position there is not just an ATOM or BOND, there can also be
-/// a BRANCH, which is itself a delimited sequence of ATOM and BOND:
-///
-/// (ATOM | BRANCH)
-fn smiles(s: &str) -> IResult<&str, Molecule> {
-    many0(pair(opt(bond), atom))(s)
+fn smiles(s: &str) -> IResult<&str, Vec<Expr>> {
+    context("smiles", many1(alt((atom, bond, label, branch))))(s)
 }
 
 /// a smiles is an atom followed by additional bond, atom pairs, but the
@@ -68,5 +89,6 @@ fn smiles(s: &str) -> IResult<&str, Molecule> {
 fn main() {
     let smi = read_to_string("test.smi").unwrap().trim().to_string();
     dbg!(&smi);
-    dbg!(smiles(&smi).unwrap());
+    let (rest, _got) = dbg!(smiles(&smi).unwrap());
+    assert!(rest.is_empty());
 }
