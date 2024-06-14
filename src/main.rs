@@ -1,5 +1,17 @@
+#![allow(unused)]
+
+use std::collections::HashMap;
+use std::error::Error;
+use std::io;
 use std::{fmt::Display, fs::read_to_string};
 
+use nom::bytes::complete::{take_while, take_while1};
+use nom::character::complete::{space0, space1};
+use nom::character::{is_alphanumeric, is_space};
+use nom::combinator::recognize;
+use nom::multi::separated_list1;
+use nom::sequence::tuple;
+use nom::AsChar;
 use nom::{
     branch::alt,
     bytes::complete::tag,
@@ -11,17 +23,21 @@ use nom::{
 };
 
 fn element(s: &str) -> IResult<&str, &str> {
+    // NOTE: do NOT put these in atomic order. you have to match longer tags
+    // before shorter ones or the longer tag will not match!!! for example, if B
+    // matches before Br, Br will not match
     context(
         "element",
         alt((
             tag("H"),
             tag("He"),
+            tag("Br"),
+            tag("Ne"),
             tag("B"),
             tag("C"),
             tag("N"),
             tag("O"),
             tag("F"),
-            tag("Ne"),
             tag("S"),
             tag("c"),
             tag("n"),
@@ -101,6 +117,7 @@ fn smiles(s: &str) -> IResult<&str, Vec<Expr>> {
     context("smiles", many1(alt((atom, bond, label, branch))))(s)
 }
 
+#[derive(Debug)]
 pub struct Smiles<'a> {
     exprs: Vec<Expr<'a>>,
 }
@@ -170,37 +187,68 @@ impl<'a> Smiles<'a> {
     }
 }
 
+fn parse_line(
+    s: &str,
+) -> Result<(&str, Smiles, Vec<usize>), Box<dyn Error + '_>> {
+    let (rest, got) = tuple((
+        take_while1(AsChar::is_alphanum),
+        space1,
+        smiles,
+        space1,
+        delimited(
+            char('('),
+            separated_list1(tuple((tag(","), space0)), digit1),
+            char(')'),
+        ),
+    ))(&s)?;
+    assert!(rest.is_empty(), "{}", rest);
+    let (pid, _space, exprs, _space2, tors) = got;
+    let tors: Vec<usize> =
+        tors.into_iter().map(|s| s.parse().unwrap()).collect();
+    Ok((pid, Smiles { exprs }, tors))
+}
+
 fn main() {
-    let smi = read_to_string("test.smi").unwrap().trim().to_string();
-    dbg!(&smi);
-    let mut got = Smiles::try_from(smi.as_str()).unwrap();
+    loop {
+        let mut buf = String::new();
+        io::stdin().read_line(&mut buf).unwrap();
+        if !buf.is_empty() {
+            let Ok((pid, mut smiles, tors)) = parse_line(buf.trim()) else {
+                eprintln!("error");
+                continue;
+            };
+            let mut atoms = smiles.atoms_mut();
 
-    // check that the initial parse worked
-    assert_eq!(got.to_string(), smi);
+            // this gives a sequence of (idx, atom_idx) pair. I should sort by
+            // atom_idx, then go back through by idx setting atom_idx to an
+            // incrementing counter. cloning here because we don't want to
+            // modify atoms yet
+            let mut pairs: Vec<(usize, usize)> =
+                atoms.iter().map(|u| **u).enumerate().collect();
+            pairs.sort_by_key(|p| p.1);
 
-    // I have 49 atoms, but the atom indices go from 1 to 59. I want to BOTH
-    // bring the values above 49 back into range AND make the numbers continuous
+            // map between the old and new numbering scheme for fixing torsion
+            // indices
+            let mut atom_map = HashMap::new();
 
-    let mut atoms = got.atoms_mut();
+            let mut atom_idx = 1;
+            for (idx, _) in pairs {
+                atom_map.insert(*atoms[idx], atom_idx);
+                *atoms[idx] = atom_idx;
+                atom_idx += 1;
+            }
 
-    // this gives a sequence of (idx, atom_idx) pair. I should sort by atom_idx,
-    // then go back through by idx setting atom_idx to an incrementing counter.
-    // cloning here because we don't want to modify atoms yet
-    let mut pairs: Vec<(usize, usize)> =
-        atoms.iter().map(|u| **u).enumerate().collect();
-    pairs.sort_by_key(|p| p.1);
-
-    let mut atom_idx = 1;
-    for (idx, _) in pairs {
-        *atoms[idx] = atom_idx;
-        atom_idx += 1;
+            print!("{pid} {smiles} (");
+            let tl = tors.len();
+            for (i, t) in tors.into_iter().enumerate() {
+                print!("{}", atom_map[&(t + 1)] - 1);
+                if i < tl - 1 {
+                    print!(", ");
+                }
+            }
+            println!(")");
+        }
     }
-
-    dbg!(atoms.len());
-    dbg!(atoms);
-
-    println!("output:");
-    println!("{}", got.to_string());
 }
 
 #[cfg(test)]
@@ -212,5 +260,15 @@ mod tests {
         let smi = read_to_string("test.smi").unwrap().trim().to_string();
         let got = Smiles::try_from(smi.as_str()).unwrap();
         assert_eq!(got.to_string(), smi);
+    }
+
+    #[test]
+    fn parse_line() {
+        let line = "t146j [C:1]1([H:31])=[N:2][C:3]([C:4]([C:5]([C:6](/[N:7]=[S:8](\\[N:9]([C:10]([C:11]([C:12]([N:13]([c:14]2[n:15][c:16]([H:45])[c:17]([H:46])[c:18]([H:47])[c:19]2[H:48])[C:20]([c:21]2[c:22]([H:51])[c:23]([H:52])[c:24]([Br:25])[c:26]([H:53])[c:27]2[H:54])([H:49])[H:50])([H:43])[H:44])([H:41])[H:42])([H:39])[H:40])[H:38])[C:28]([H:55])([H:56])[H:57])([H:36])[H:37])([H:34])[H:35])([H:32])[H:33])=[C:29]([H:58])[N:30]1[H:59] (9, 8, 7, 27)";
+        let res: IResult<_, _> =
+            tuple((take_while1(AsChar::is_alphanum), space1, smiles))(line);
+        let smi = line.split_ascii_whitespace().nth(1).unwrap();
+        let got = Smiles::try_from(smi).unwrap();
+        super::parse_line(line);
     }
 }
