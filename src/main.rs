@@ -67,7 +67,6 @@ fn bond(s: &str) -> IResult<&str, Expr> {
 // BOND, a LABEL, or a BRANCH, where a BRANCH is itself a delimited sequence of
 // ATOM | BOND | LABEL | BRANCH
 
-#[allow(unused)]
 #[derive(Debug)]
 enum Expr<'a> {
     Atom(&'a str, usize),
@@ -102,7 +101,7 @@ fn smiles(s: &str) -> IResult<&str, Vec<Expr>> {
     context("smiles", many1(alt((atom, bond, label, branch))))(s)
 }
 
-struct Smiles<'a> {
+pub struct Smiles<'a> {
     exprs: Vec<Expr<'a>>,
 }
 
@@ -130,7 +129,6 @@ impl Display for Smiles<'_> {
     }
 }
 
-#[allow(unused)]
 fn get_atoms<'a>(exprs: &'a Vec<Expr<'a>>) -> Vec<(&'a &'a str, &'a usize)> {
     let mut ret = Vec::new();
     for e in exprs {
@@ -160,8 +158,7 @@ fn get_atoms_mut<'a, 'b>(
 }
 
 impl<'a> Smiles<'a> {
-    #[allow(unused)]
-    fn atoms(&self) -> Vec<&usize> {
+    pub fn atoms(&self) -> Vec<&usize> {
         get_atoms(&self.exprs).into_iter().map(|p| p.1).collect()
     }
 
@@ -173,12 +170,6 @@ impl<'a> Smiles<'a> {
     }
 }
 
-/// a smiles is an atom followed by additional bond, atom pairs, but the
-/// explicit bond is optional (indicating a single bond)
-///
-/// TODO where do ring labels go? they're like atoms I think
-///
-/// SMILES := ATOM [[BOND] ATOM]*
 fn main() {
     let smi = read_to_string("test.smi").unwrap().trim().to_string();
     dbg!(&smi);
